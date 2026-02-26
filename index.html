@@ -1,0 +1,1285 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <!-- 固定“デザインキャンバス”= 1200x2300 に収める（iPhoneでも縮小表示） -->
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+  <title>かわいいソリティア</title>
+  <style>
+    :root{
+      --bg1:#fff2f7;
+      --bg2:#e9fbff;
+      --ink:#2b2b2b;
+      --muted:#6b6b6b;
+      --panel:rgba(255,255,255,.78);
+      --shadow: 0 10px 30px rgba(0,0,0,.12);
+      --shadow2: 0 6px 18px rgba(0,0,0,.10);
+      --radius:18px;
+      --accent:#ff5fa8;
+      --ok:#22c55e;
+
+      /* ★固定デザイン解像度 */
+      --designW: 1200;
+      --designH: 2300;
+
+      /* ★カードサイズは固定キャンバスに最適化（1200幅に7列+余白が入る） */
+      --cardW: 128px;
+      --cardH: 173px;
+      --gap: 16px;
+      --pileMinH: calc(var(--cardH) + 6px);
+      --tabOffset: 26px; /* tableauの縦ずらし（2300内に収まるよう調整） */
+      --safeTop: env(safe-area-inset-top);
+      --safeBot: env(safe-area-inset-bottom);
+      --safeL: env(safe-area-inset-left);
+      --safeR: env(safe-area-inset-right);
+    }
+
+    html, body{
+      height: 100%;
+      margin: 0;
+      font-family: ui-rounded, system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", "Segoe UI", sans-serif;
+      color: var(--ink);
+      overscroll-behavior: none;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      background: radial-gradient(1200px 600px at 15% 10%, #ffffff 0%, rgba(255,255,255,0) 60%),
+                  radial-gradient(900px 500px at 85% 0%, #ffffff 0%, rgba(255,255,255,0) 60%),
+                  linear-gradient(135deg, var(--bg1), var(--bg2));
+    }
+
+    /* ===== 1200x2300の固定キャンバスを、端末に合わせて等比縮小表示 ===== */
+    .viewport{
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: var(--safeTop) var(--safeR) var(--safeBot) var(--safeL);
+      box-sizing: border-box;
+    }
+    .app{
+      width: calc(var(--designW) * 1px);
+      height: calc(var(--designH) * 1px);
+      transform-origin: top left;
+      /* scaleはJSで設定 */
+      border-radius: 22px;
+      overflow: hidden;
+    }
+
+    .appInner{
+      height: 100%;
+      padding: 18px 18px 18px 18px;
+      box-sizing: border-box;
+      display:flex;
+      flex-direction:column;
+      gap: 14px;
+    }
+
+    .topbar{
+      background: var(--panel);
+      border-radius: 20px;
+      box-shadow: var(--shadow2);
+      padding: 14px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    .brand{display:flex; align-items:center; gap:12px; min-width:0;}
+    .logo{
+      width: 54px; height: 54px; border-radius: 18px;
+      background: linear-gradient(135deg, rgba(255,95,168,.85), rgba(73,201,255,.85));
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.65);
+      display:grid; place-items:center;
+    }
+    .logo span{ font-size: 26px; filter: drop-shadow(0 4px 8px rgba(0,0,0,.15)); }
+    .titlewrap{min-width:0}
+    .title{
+      font-weight: 900;
+      letter-spacing: .02em;
+      font-size: 20px;
+      line-height: 1.15;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .subtitle{
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+
+    .controls{
+      display:flex;
+      gap: 10px;
+      align-items:center;
+      flex-wrap: wrap;
+      justify-content:flex-end;
+    }
+
+    button, select{
+      font: inherit;
+      border: none;
+      border-radius: 16px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,.92);
+      box-shadow: 0 6px 16px rgba(0,0,0,.10);
+      color: var(--ink);
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    button:active{ transform: translateY(1px) scale(.995); }
+    button.primary{
+      background: linear-gradient(135deg, rgba(255,95,168,.95), rgba(255,170,220,.95));
+      color: white;
+      box-shadow: 0 10px 18px rgba(255,95,168,.25);
+    }
+    button.ghost{ background: rgba(255,255,255,.70); }
+
+    .hintBar{
+      display:flex;
+      justify-content:space-between;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--muted);
+      padding: 0 6px;
+      align-items:center;
+      flex-wrap: wrap;
+    }
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding: 8px 12px;
+      background: rgba(255,255,255,.75);
+      border-radius: 999px;
+      box-shadow: 0 6px 14px rgba(0,0,0,.08);
+    }
+
+    .main{flex:1; display:flex; flex-direction:column; min-height:0;}
+    .board{
+      flex:1;
+      background: rgba(255,255,255,.60);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      min-height: 0;
+      display:flex;
+      flex-direction:column;
+      gap: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .row{
+      display:flex;
+      gap: var(--gap);
+      align-items:flex-start;
+      justify-content:space-between;
+    }
+
+    .pile{
+      width: var(--cardW);
+      min-height: var(--pileMinH);
+      border-radius: 18px;
+      background: rgba(255,255,255,.55);
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.65);
+      position: relative;
+      flex: 0 0 auto;
+    }
+
+    .pileLabel{
+      position:absolute;
+      top: -10px;
+      left: 10px;
+      font-size: 11px;
+      padding: 4px 10px;
+      background: rgba(255,255,255,.92);
+      border-radius: 999px;
+      box-shadow: 0 6px 14px rgba(0,0,0,.08);
+      color: var(--muted);
+      pointer-events:none;
+    }
+
+    .pileTarget{
+      position:absolute; inset: 0;
+      border-radius: 18px;
+      outline: 0px solid transparent;
+      transition: outline .12s ease, background .12s ease;
+    }
+    .pileTarget.highlight{
+      outline: 3px solid rgba(255,95,168,.65);
+      background: rgba(255,95,168,.08);
+    }
+    .pileTarget.ok{
+      outline: 3px solid rgba(34,197,94,.65);
+      background: rgba(34,197,94,.08);
+    }
+
+    .tableau{
+      display:flex;
+      gap: var(--gap);
+      justify-content:space-between;
+      flex: 1;
+      min-height: 0;
+    }
+    .col{
+      width: var(--cardW);
+      border-radius: 18px;
+      background: rgba(255,255,255,.42);
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.55);
+      position: relative;
+      flex: 0 0 auto;
+      min-height: 100%;
+    }
+
+    .card{
+      width: var(--cardW);
+      height: var(--cardH);
+      border-radius: 18px;
+      position: absolute;
+      left: 0;
+      top: 0;
+      box-shadow: 0 14px 24px rgba(0,0,0,.18);
+      transform: translate3d(0,0,0);
+      touch-action: none;
+    }
+    .card .inner{
+      width: 100%; height: 100%;
+      border-radius: 18px;
+      overflow: hidden;
+      background: white;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.75);
+      position: relative;
+    }
+    .card.faceDown .inner{
+      background: radial-gradient(140px 140px at 30% 20%, rgba(255,255,255,.45), rgba(255,255,255,0) 60%),
+                  linear-gradient(135deg, rgba(255,95,168,.85), rgba(73,201,255,.85));
+    }
+    .card.faceDown .pattern{
+      position:absolute; inset: 12px;
+      border-radius: 14px;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(255,255,255,.25) 0 8px, transparent 9px),
+        radial-gradient(circle at 80% 30%, rgba(255,255,255,.25) 0 7px, transparent 8px),
+        radial-gradient(circle at 40% 70%, rgba(255,255,255,.25) 0 7px, transparent 8px),
+        radial-gradient(circle at 70% 80%, rgba(255,255,255,.25) 0 8px, transparent 9px);
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.25);
+    }
+
+    .card.selected{
+      filter: drop-shadow(0 18px 24px rgba(255,95,168,.25));
+      transform: translate3d(0,-8px,0) scale(1.02);
+    }
+
+    .card .corner{
+      position:absolute;
+      font-weight: 900;
+      font-size: 16px;
+      line-height: 1;
+      padding: 10px 11px;
+      color: var(--ink);
+      text-shadow: 0 1px 0 rgba(255,255,255,.7);
+    }
+    .card .corner.bottom{ right: 0; bottom: 0; transform: rotate(180deg); }
+    .card .miniSuit{ position:absolute; left: 12px; top: 40px; font-size: 16px; }
+    .kawaii{
+      position:absolute; inset: 0;
+      display:grid; place-items:center;
+      font-size: 30px;
+      filter: drop-shadow(0 8px 10px rgba(0,0,0,.10));
+    }
+    .red{ color: #e11d48; }
+    .black{ color: #111827; }
+
+    .toast{
+      position:absolute;
+      left: 16px; right: 16px;
+      bottom: 16px;
+      padding: 12px 14px;
+      background: rgba(255,255,255,.94);
+      border-radius: 18px;
+      box-shadow: var(--shadow2);
+      color: var(--ink);
+      font-size: 14px;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity .18s ease, transform .18s ease;
+      pointer-events: none;
+      z-index: 40;
+    }
+    .toast.show{ opacity: 1; transform: translateY(0); }
+
+    .winOverlay{
+      position:absolute; inset:0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      background: radial-gradient(900px 600px at 50% 30%, rgba(255,255,255,.92), rgba(255,255,255,.72));
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 50;
+    }
+    .winOverlay.show{ display:flex; }
+    .winCard{
+      width: 760px;
+      background: rgba(255,255,255,.96);
+      border-radius: 30px;
+      box-shadow: var(--shadow);
+      padding: 22px 18px;
+      text-align:center;
+      overflow: hidden;
+    }
+    .winMascot{
+      font-size: 74px;
+      margin: 6px 0 4px;
+      filter: drop-shadow(0 14px 18px rgba(0,0,0,.12));
+    }
+    .winTitle{
+      font-weight: 1000;
+      font-size: 28px;
+      margin: 8px 0 8px;
+      letter-spacing: .02em;
+    }
+    .winText{
+      color: var(--muted);
+      font-size: 15px;
+      margin: 0 0 14px;
+    }
+    .winBtns{ display:flex; justify-content:center; gap: 12px; flex-wrap: wrap; }
+
+    canvas#confetti{
+      position:absolute; inset:0;
+      pointer-events:none;
+      z-index: 60;
+    }
+  </style>
+</head>
+<body>
+  <div class="viewport">
+    <div class="app" id="app">
+      <div class="appInner">
+        <div class="topbar">
+          <div class="brand">
+            <div class="logo"><span>🃏</span></div>
+            <div class="titlewrap">
+              <div class="title">かわいいソリティア</div>
+              <div class="subtitle">1200×2300に全要素が収まるレイアウト（iPhoneは等比縮小）</div>
+            </div>
+          </div>
+
+          <div class="controls">
+            <select id="difficulty" aria-label="難易度">
+              <option value="easy">かんたん（山札1枚 / 自動移動ON）</option>
+              <option value="normal" selected>ふつう（山札1枚）</option>
+              <option value="hard">むずかしい（山札3枚 / 自動移動OFF）</option>
+            </select>
+            <button class="ghost" id="undoBtn">↩︎ 戻す</button>
+            <button class="ghost" id="hintBtn">💡 ヒント</button>
+            <button class="primary" id="newBtn">✨ 新しいゲーム</button>
+          </div>
+        </div>
+
+        <div class="hintBar">
+          <div class="pill">🧠 Moves: <b id="moves">0</b></div>
+          <div class="pill">⏱ Time: <b id="time">00:00</b></div>
+          <div class="pill">📌 タップ→選択 / タップ→置く（ドラッグもOK）</div>
+        </div>
+
+        <div class="main">
+          <div class="board" id="board">
+            <canvas id="confetti"></canvas>
+
+            <div class="row">
+              <div class="pile" id="stockPile">
+                <div class="pileLabel">山札</div>
+                <div class="pileTarget" data-pile="stock"></div>
+              </div>
+
+              <div class="pile" id="wastePile">
+                <div class="pileLabel">めくり札</div>
+                <div class="pileTarget" data-pile="waste"></div>
+              </div>
+
+              <div style="flex:1"></div>
+
+              <div class="pile" id="foundation0">
+                <div class="pileLabel">♠</div>
+                <div class="pileTarget" data-pile="foundation" data-idx="0"></div>
+              </div>
+              <div class="pile" id="foundation1">
+                <div class="pileLabel">♥</div>
+                <div class="pileTarget" data-pile="foundation" data-idx="1"></div>
+              </div>
+              <div class="pile" id="foundation2">
+                <div class="pileLabel">♦</div>
+                <div class="pileTarget" data-pile="foundation" data-idx="2"></div>
+              </div>
+              <div class="pile" id="foundation3">
+                <div class="pileLabel">♣</div>
+                <div class="pileTarget" data-pile="foundation" data-idx="3"></div>
+              </div>
+            </div>
+
+            <div class="tableau" id="tableau">
+              <div class="col" data-pile="tableau" data-idx="0"></div>
+              <div class="col" data-pile="tableau" data-idx="1"></div>
+              <div class="col" data-pile="tableau" data-idx="2"></div>
+              <div class="col" data-pile="tableau" data-idx="3"></div>
+              <div class="col" data-pile="tableau" data-idx="4"></div>
+              <div class="col" data-pile="tableau" data-idx="5"></div>
+              <div class="col" data-pile="tableau" data-idx="6"></div>
+            </div>
+
+            <div class="toast" id="toast"></div>
+
+            <div class="winOverlay" id="winOverlay" aria-hidden="true">
+              <div class="winCard">
+                <div class="winMascot">🎉🐻‍❄️✨</div>
+                <div class="winTitle">クリア！おめでとう！！</div>
+                <div class="winText" id="winDetail">すごい！きれいに揃えられたね！</div>
+                <div class="winBtns">
+                  <button class="primary" id="playAgainBtn">もう一回遊ぶ</button>
+                  <button class="ghost" id="closeWinBtn">閉じる</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ===== 固定キャンバス(1200x2300)を端末に収めるスケーリング =====
+  const app = document.getElementById("app");
+  function fitToScreen(){
+    const designW = 1200, designH = 2300;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const scale = Math.min(vw / designW, vh / designH);
+    app.style.transform = `scale(${scale})`;
+  }
+  window.addEventListener("resize", fitToScreen, {passive:true});
+  fitToScreen();
+
+  // ===== Utilities =====
+  const $ = (sel, el=document) => el.querySelector(sel);
+  const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+  const pad2 = (n)=>String(n).padStart(2,"0");
+
+  document.addEventListener("gesturestart", e => e.preventDefault(), {passive:false});
+
+  // ===== Card model =====
+  const SUITS = ["♠","♥","♦","♣"];
+  const SUIT_TO_FOUND = {"♠":0,"♥":1,"♦":2,"♣":3};
+  const RANKS = [null,"A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+  const isRed = (s)=> (s==="♥" || s==="♦");
+  const SUIT_MASCOT = {"♠":"🐧","♥":"🐰","♦":"🦊","♣":"🐻"};
+
+  // ===== Game state =====
+  const state = {
+    difficulty: "normal",
+    drawCount: 1,
+    autoToFoundation: false,
+    allowUndo: true,
+    stock: [],
+    waste: [],
+    foundations: [[],[],[],[]],
+    tableau: [[],[],[],[],[],[],[]],
+    selected: null,
+    moves: 0,
+    startTime: 0,
+    timerId: null,
+    history: [],
+    won: false,
+  };
+
+  function makeDeck(){
+    const deck=[];
+    let id=0;
+    for(const s of SUITS){
+      for(let r=1;r<=13;r++){
+        deck.push({ id: "c"+(id++), suit:s, rank:r, faceUp:false });
+      }
+    }
+    return deck;
+  }
+  function shuffle(arr){
+    for(let i=arr.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+    }
+    return arr;
+  }
+  function setDifficulty(mode){
+    state.difficulty = mode;
+    if(mode==="easy"){
+      state.drawCount = 1;
+      state.autoToFoundation = true;
+      state.allowUndo = true;
+    } else if(mode==="normal"){
+      state.drawCount = 1;
+      state.autoToFoundation = false;
+      state.allowUndo = true;
+    } else {
+      state.drawCount = 3;
+      state.autoToFoundation = false;
+      state.allowUndo = true;
+    }
+  }
+  function deepCloneGame(){
+    return {
+      stock: state.stock.map(c=>({...c})),
+      waste: state.waste.map(c=>({...c})),
+      foundations: state.foundations.map(p=>p.map(c=>({...c}))),
+      tableau: state.tableau.map(col=>col.map(c=>({...c}))),
+      moves: state.moves,
+      won: state.won
+    };
+  }
+  function pushHistory(){
+    if(!state.allowUndo) return;
+    state.history.push(deepCloneGame());
+    if(state.history.length>80) state.history.shift();
+  }
+  function undo(){
+    const prev = state.history.pop();
+    if(!prev){ toast("戻せる手がありません"); return; }
+    state.stock = prev.stock;
+    state.waste = prev.waste;
+    state.foundations = prev.foundations;
+    state.tableau = prev.tableau;
+    state.moves = prev.moves;
+    state.won = prev.won;
+    clearSelection();
+    render();
+  }
+
+  function newGame(){
+    stopWin();
+    clearSelection();
+    state.history = [];
+    state.moves = 0;
+    state.won = false;
+
+    let deck = shuffle(makeDeck());
+    state.tableau = [[],[],[],[],[],[],[]];
+    state.foundations = [[],[],[],[]];
+    state.waste = [];
+
+    for(let col=0; col<7; col++){
+      for(let i=0; i<=col; i++){
+        const card = deck.pop();
+        card.faceUp = (i===col);
+        state.tableau[col].push(card);
+      }
+    }
+    state.stock = deck.map(c => ({...c, faceUp:false}));
+
+    state.startTime = Date.now();
+    if(state.timerId) clearInterval(state.timerId);
+    state.timerId = setInterval(updateTime, 250);
+    updateTime();
+
+    render();
+    toast("ゲーム開始！タップかドラッグで遊んでね");
+  }
+
+  function updateTime(){
+    const t = Date.now() - state.startTime;
+    const s = Math.floor(t/1000);
+    $("#time").textContent = `${pad2(Math.floor(s/60))}:${pad2(s%60)}`;
+  }
+
+  // ===== Rules =====
+  const top = (pile)=>pile[pile.length-1];
+  const pileRef = (ref)=>{
+    if(ref.type==="stock") return state.stock;
+    if(ref.type==="waste") return state.waste;
+    if(ref.type==="foundation") return state.foundations[ref.idx];
+    if(ref.type==="tableau") return state.tableau[ref.idx];
+    return null;
+  };
+
+  function canMoveToFoundation(card, fIdx){
+    if(!card) return false;
+    const pile = state.foundations[fIdx];
+    if(SUIT_TO_FOUND[card.suit] !== fIdx) return false;
+    if(pile.length===0) return card.rank===1;
+    return top(pile).rank + 1 === card.rank;
+  }
+  function canMoveToTableau(card, colIdx){
+    const col = state.tableau[colIdx];
+    if(col.length===0) return card.rank===13;
+    const dest = top(col);
+    if(!dest.faceUp) return false;
+    const diffColor = isRed(card.suit) !== isRed(dest.suit);
+    return diffColor && (dest.rank === card.rank + 1);
+  }
+  function tryAutoFlip(colIdx){
+    const col = state.tableau[colIdx];
+    if(col.length>0 && !top(col).faceUp){
+      top(col).faceUp = true;
+      return true;
+    }
+    return false;
+  }
+  function countFoundationCards(){
+    return state.foundations.reduce((a,p)=>a+p.length,0);
+  }
+  function checkWin(){
+    if(countFoundationCards()===52) win();
+  }
+  function incMove(){
+    state.moves++;
+    $("#moves").textContent = state.moves;
+  }
+
+  function getSelectedMovingCards(from){
+    if(from.type==="waste"){
+      if(state.waste.length===0) return null;
+      return { cards:[top(state.waste)], startIndex: state.waste.length-1 };
+    }
+    if(from.type==="foundation"){
+      const p = state.foundations[from.idx];
+      if(p.length===0) return null;
+      return { cards:[top(p)], startIndex: p.length-1 };
+    }
+    if(from.type==="tableau"){
+      const col = state.tableau[from.idx];
+      if(col.length===0) return null;
+      const i = from.cardIndex ?? (col.length-1);
+      if(i<0 || i>=col.length) return null;
+      if(!col[i].faceUp) return null;
+      return { cards: col.slice(i), startIndex:i };
+    }
+    return null;
+  }
+
+  function clearHighlights(){
+    $$(".pileTarget").forEach(x=>x.classList.remove("highlight","ok"));
+    $$(".col").forEach(x=>x.classList.remove("highlight","ok"));
+  }
+  function clearSelection(){
+    state.selected = null;
+    clearHighlights();
+    $$(".card").forEach(c=>c.classList.remove("selected"));
+  }
+  function isCardSelected(id){
+    return !!(state.selected && state.selected.cards && state.selected.cards.some(c=>c.id===id));
+  }
+  function highlightDestinations(card, stackLen){
+    clearHighlights();
+    if(stackLen===1){
+      for(let i=0;i<4;i++){
+        if(canMoveToFoundation(card, i)){
+          $(`.pileTarget[data-pile="foundation"][data-idx="${i}"]`).classList.add("ok");
+        }
+      }
+    }
+    for(let i=0;i<7;i++){
+      if(canMoveToTableau(card, i)){
+        $(`.col[data-idx="${i}"]`).classList.add("ok");
+      }
+    }
+  }
+
+  function selectFrom(ref, cardIndex=null){
+    clearSelection();
+    const moving = getSelectedMovingCards({...ref, cardIndex});
+    if(!moving) return;
+    state.selected = { from: {...ref, cardIndex}, startIndex: moving.startIndex, cards: moving.cards };
+    render();
+    highlightDestinations(moving.cards[0], moving.cards.length);
+  }
+
+  function drawFromStock(){
+    if(state.stock.length===0){
+      if(state.waste.length===0){ toast("山札もめくり札も空だよ"); return; }
+      pushHistory();
+      const recycled = state.waste.map(c => ({...c, faceUp:false})).reverse();
+      state.stock = recycled;
+      state.waste = [];
+      clearSelection();
+      incMove();
+      render();
+      toast("めくり札を山札に戻したよ");
+      return;
+    }
+    pushHistory();
+    const n = Math.min(state.drawCount, state.stock.length);
+    for(let i=0;i<n;i++){
+      const c = state.stock.pop();
+      c.faceUp = true;
+      state.waste.push(c);
+    }
+    clearSelection();
+    incMove();
+    render();
+    if(state.autoToFoundation && state.difficulty==="easy") autoToFoundationSweep();
+  }
+
+  function moveCards(from, to){
+    const moving = getSelectedMovingCards(from);
+    if(!moving || moving.cards.length===0) return false;
+
+    const first = moving.cards[0];
+    if(to.type==="foundation"){
+      if(moving.cards.length!==1) return false;
+      if(!canMoveToFoundation(first, to.idx)) return false;
+    } else if(to.type==="tableau"){
+      if(!canMoveToTableau(first, to.idx)) return false;
+    } else {
+      return false;
+    }
+
+    pushHistory();
+    const src = pileRef(from);
+    src.splice(moving.startIndex);
+    const dst = pileRef(to);
+    dst.push(...moving.cards);
+    if(from.type==="tableau") tryAutoFlip(from.idx);
+
+    clearSelection();
+    incMove();
+    render();
+    if(state.autoToFoundation && state.difficulty==="easy") autoToFoundationSweep();
+    checkWin();
+    return true;
+  }
+
+  function autoToFoundationSweep(){
+    let moved = true;
+    let safety = 0;
+    while(moved && safety++ < 40){
+      moved = false;
+      const w = top(state.waste);
+      if(w){
+        const fIdx = SUIT_TO_FOUND[w.suit];
+        if(canMoveToFoundation(w, fIdx)){
+          pushHistory();
+          state.waste.pop();
+          state.foundations[fIdx].push(w);
+          incMove();
+          moved = true;
+          continue;
+        }
+      }
+      for(let c=0;c<7;c++){
+        const col = state.tableau[c];
+        const t = top(col);
+        if(t && t.faceUp){
+          const fIdx = SUIT_TO_FOUND[t.suit];
+          if(canMoveToFoundation(t, fIdx)){
+            pushHistory();
+            col.pop();
+            state.foundations[fIdx].push(t);
+            tryAutoFlip(c);
+            incMove();
+            moved = true;
+            break;
+          }
+        }
+      }
+    }
+    render();
+    checkWin();
+  }
+
+  function toast(msg){
+    const el = $("#toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=>el.classList.remove("show"), 1600);
+  }
+
+  function hint(){
+    const w = top(state.waste);
+    if(w){
+      const f = SUIT_TO_FOUND[w.suit];
+      if(canMoveToFoundation(w, f)){
+        toast(`ヒント：めくり札の ${RANKS[w.rank]}${w.suit} を上の組札へ置けるよ`);
+        return;
+      }
+      for(let i=0;i<7;i++){
+        if(canMoveToTableau(w, i)){
+          toast(`ヒント：めくり札の ${RANKS[w.rank]}${w.suit} を列 ${i+1} に置けるよ`);
+          return;
+        }
+      }
+    }
+    for(let c=0;c<7;c++){
+      const col = state.tableau[c];
+      const t = top(col);
+      if(t && t.faceUp){
+        const f = SUIT_TO_FOUND[t.suit];
+        if(canMoveToFoundation(t, f)){
+          toast(`ヒント：列 ${c+1} の ${RANKS[t.rank]}${t.suit} を上の組札へ置けるよ`);
+          return;
+        }
+      }
+    }
+    toast("ヒント：山札をめくってみてね");
+  }
+
+  // ===== Win =====
+  const board = $("#board");
+  const confetti = $("#confetti");
+  const ctx = confetti.getContext("2d");
+  let confettiAnim = null;
+  let confettiParticles = [];
+
+  function resizeConfetti(){
+    const r = board.getBoundingClientRect();
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    confetti.width = Math.floor(r.width * dpr);
+    confetti.height = Math.floor(r.height * dpr);
+    confetti.style.width = r.width + "px";
+    confetti.style.height = r.height + "px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener("resize", resizeConfetti, {passive:true});
+
+  function playWinSound(){
+    try{
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ac = new AudioCtx();
+      const now = ac.currentTime;
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      notes.forEach((f, i)=>{
+        const o = ac.createOscillator();
+        const g = ac.createGain();
+        o.type = "sine";
+        o.frequency.setValueAtTime(f, now + i*0.06);
+        g.gain.setValueAtTime(0.0001, now + i*0.06);
+        g.gain.exponentialRampToValueAtTime(0.25, now + i*0.06 + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + i*0.06 + 0.18);
+        o.connect(g).connect(ac.destination);
+        o.start(now + i*0.06);
+        o.stop(now + i*0.06 + 0.20);
+      });
+      setTimeout(()=>ac.close(), 900);
+    }catch(e){}
+  }
+
+  function startConfetti(){
+    resizeConfetti();
+    confettiParticles = [];
+    const r = board.getBoundingClientRect();
+    const emojis = ["✨","🎉","🌸","⭐️","💖","🍬"];
+    const N = 120;
+    for(let i=0;i<N;i++){
+      confettiParticles.push({
+        x: Math.random()*r.width,
+        y: -20 - Math.random()*r.height*0.4,
+        vx: (Math.random()*2-1)*0.8,
+        vy: 2.2 + Math.random()*2.8,
+        rot: Math.random()*Math.PI*2,
+        vr: (Math.random()*2-1)*0.08,
+        size: 12 + Math.random()*14,
+        emoji: emojis[Math.floor(Math.random()*emojis.length)],
+        life: 220 + Math.random()*140
+      });
+    }
+    cancelAnimationFrame(confettiAnim);
+    const tick=()=>{
+      ctx.clearRect(0,0,confetti.width,confetti.height);
+      for(const p of confettiParticles){
+        p.x += p.vx; p.y += p.vy; p.vy += 0.02; p.rot += p.vr; p.life -= 1;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.font = `${p.size}px system-ui, Apple Color Emoji, Segoe UI Emoji`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(p.emoji, 0, 0);
+        ctx.restore();
+      }
+      confettiParticles = confettiParticles.filter(p => p.life>0 && p.y < board.getBoundingClientRect().height + 80);
+      if(confettiParticles.length>0) confettiAnim = requestAnimationFrame(tick);
+      else ctx.clearRect(0,0,confetti.width,confetti.height);
+    };
+    tick();
+  }
+
+  function stopWin(){
+    state.won = false;
+    $("#winOverlay").classList.remove("show");
+    $("#winOverlay").setAttribute("aria-hidden","true");
+    ctx.clearRect(0,0,confetti.width,confetti.height);
+    cancelAnimationFrame(confettiAnim);
+    confettiAnim = null;
+  }
+
+  function win(){
+    if(state.won) return;
+    state.won = true;
+    $("#winDetail").textContent = `きみ、天才…！✨（${$("#time").textContent} / ${state.moves}手）`;
+    $("#winOverlay").classList.add("show");
+    $("#winOverlay").setAttribute("aria-hidden","false");
+    startConfetti();
+    playWinSound();
+  }
+
+  // ===== Input (tap + drag) =====
+  function handlePileTap(ref){
+    if(ref.type==="stock"){ drawFromStock(); return; }
+
+    if(!state.selected){
+      if(ref.type==="waste"){
+        if(state.waste.length===0){ toast("めくり札がないよ"); return; }
+        selectFrom({type:"waste"}); return;
+      }
+      if(ref.type==="foundation"){
+        if(state.foundations[ref.idx].length===0){ toast("ここはまだ空だよ"); return; }
+        selectFrom({type:"foundation", idx:ref.idx}); return;
+      }
+      if(ref.type==="tableau"){
+        const col = state.tableau[ref.idx];
+        if(col.length===0){ toast("空の列だよ（Kを置けるよ）"); return; }
+        const t = top(col);
+        if(!t.faceUp){
+          pushHistory();
+          t.faceUp = true;
+          incMove();
+          render();
+          toast("カードをめくったよ");
+          return;
+        }
+        selectFrom({type:"tableau", idx:ref.idx});
+      }
+      return;
+    }
+
+    const from = normalizeFrom(state.selected.from);
+    if(isSameRef(from, ref)){
+      clearSelection(); render(); return;
+    }
+    const ok = moveCards(from, ref);
+    if(!ok){
+      toast("そこには置けないよ（色違いで1つ小さい数字に繋げてね）");
+      highlightDestinations(state.selected.cards[0], state.selected.cards.length);
+    }
+  }
+
+  function normalizeFrom(from){
+    if(from.type==="tableau"){
+      const col = state.tableau[from.idx];
+      let idx = from.cardIndex;
+      if(idx==null) idx = col.length-1;
+      return {type:"tableau", idx:from.idx, cardIndex: idx};
+    }
+    return from;
+  }
+  function isSameRef(a,b){
+    return a.type===b.type && (a.idx??-1)===(b.idx??-1);
+  }
+
+  // Drag & drop
+  let drag = null;
+  function cardElementById(id){ return $(`.card[data-id="${id}"]`); }
+  function getPointerPos(e){
+    const rect = board.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+  function hitTestTarget(clientX, clientY){
+    const els = document.elementsFromPoint(clientX, clientY);
+    for(const el of els){
+      if(el.classList && el.classList.contains("pileTarget")){
+        const pile = el.dataset.pile;
+        if(pile==="stock") return {type:"stock"};
+        if(pile==="waste") return {type:"waste"};
+        if(pile==="foundation") return {type:"foundation", idx: Number(el.dataset.idx)};
+      }
+      if(el.classList && el.classList.contains("col")){
+        return {type:"tableau", idx: Number(el.dataset.idx)};
+      }
+    }
+    return null;
+  }
+
+  function beginDrag(e, fromRef, cardIndex){
+    const moving = getSelectedMovingCards({...fromRef, cardIndex});
+    if(!moving) return;
+    state.selected = { from: {...fromRef, cardIndex}, startIndex: moving.startIndex, cards: moving.cards };
+    render();
+    highlightDestinations(moving.cards[0], moving.cards.length);
+
+    const pos = getPointerPos(e);
+    drag = { pointerId: e.pointerId, startX: pos.x, startY: pos.y };
+    state.selected.dragging = true;
+    state.selected.dragDx = 0;
+    state.selected.dragDy = 0;
+    board.setPointerCapture(e.pointerId);
+    render();
+  }
+
+  function updateDrag(e){
+    if(!drag || !state.selected) return;
+    const pos = getPointerPos(e);
+    state.selected.dragDx = pos.x - drag.startX;
+    state.selected.dragDy = pos.y - drag.startY;
+
+    const t = hitTestTarget(e.clientX, e.clientY);
+    clearHighlights();
+    if(t){
+      const card = state.selected.cards[0];
+      if(t.type==="foundation"){
+        if(state.selected.cards.length===1 && canMoveToFoundation(card, t.idx)){
+          $(`.pileTarget[data-pile="foundation"][data-idx="${t.idx}"]`).classList.add("ok");
+        } else {
+          $(`.pileTarget[data-pile="foundation"][data-idx="${t.idx}"]`).classList.add("highlight");
+        }
+      } else if(t.type==="tableau"){
+        const col = $(`.col[data-idx="${t.idx}"]`);
+        if(canMoveToTableau(card, t.idx)) col.classList.add("ok");
+        else col.classList.add("highlight");
+      }
+    } else {
+      highlightDestinations(state.selected.cards[0], state.selected.cards.length);
+    }
+
+    renderSelectedTransformOnly();
+  }
+
+  function endDrag(e){
+    if(!drag || !state.selected) { drag=null; return; }
+    const t = hitTestTarget(e.clientX, e.clientY);
+    state.selected.dragging = false;
+
+    const from = normalizeFrom(state.selected.from);
+    let moved = false;
+    if(t && (t.type==="foundation" || t.type==="tableau")){
+      moved = moveCards(from, t);
+    } else {
+      render();
+    }
+    if(!moved) render();
+    drag = null;
+  }
+
+  function renderSelectedTransformOnly(){
+    if(!state.selected || !state.selected.dragging) return;
+    const dx = state.selected.dragDx || 0;
+    const dy = state.selected.dragDy || 0;
+    for(const c of state.selected.cards){
+      const el = cardElementById(c.id);
+      if(el) el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+    }
+  }
+
+  function cardHTML(card){
+    const colorClass = isRed(card.suit) ? "red" : "black";
+    const rankText = RANKS[card.rank];
+    const mascot = SUIT_MASCOT[card.suit];
+    if(!card.faceUp){
+      return `<div class="inner"><div class="pattern"></div></div>`;
+    }
+    return `
+      <div class="inner">
+        <div class="corner ${colorClass}">${rankText}<div style="font-size:14px;margin-top:2px;">${card.suit}</div></div>
+        <div class="corner bottom ${colorClass}">${rankText}<div style="font-size:14px;margin-top:2px;">${card.suit}</div></div>
+        <div class="miniSuit ${colorClass}">${card.suit}</div>
+        <div class="kawaii ${colorClass}">
+          <div style="text-align:center;">
+            <div style="font-size:34px">${mascot}</div>
+            <div style="font-size:20px;margin-top:2px">${card.suit}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function makeCardEl(card){
+    const el = document.createElement("div");
+    el.className = "card" + (card.faceUp ? "" : " faceDown");
+    el.dataset.id = card.id;
+    el.innerHTML = cardHTML(card);
+    return el;
+  }
+
+  function clearPileDOM(){
+    $$(".card", board).forEach(el => el.remove());
+  }
+
+  function attachStockTap(){
+    $("#stockPile").onclick = (e)=>{ if(e.target.closest(".card")) return; handlePileTap({type:"stock"}); };
+  }
+
+  function attachCardHandlers(cardEl, fromRef, cardIndex=null){
+    cardEl.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      const id = cardEl.dataset.id;
+      const c = findCardById(id);
+      if(!c) return;
+
+      if(!c.faceUp && fromRef.type==="tableau"){
+        const col = state.tableau[fromRef.idx];
+        if(col.length && top(col).id===id){
+          pushHistory();
+          top(col).faceUp = true;
+          incMove();
+          clearSelection();
+          render();
+          toast("カードをめくったよ");
+        }
+        return;
+      }
+
+      if(!state.selected){
+        selectFrom(fromRef, cardIndex);
+      } else {
+        const from = normalizeFrom(state.selected.from);
+        if(fromRef.type==="tableau"){
+          const ok = moveCards(from, {type:"tableau", idx:fromRef.idx});
+          if(!ok) selectFrom(fromRef, cardIndex);
+        } else if(fromRef.type==="foundation"){
+          const ok = moveCards(from, {type:"foundation", idx:fromRef.idx});
+          if(!ok) selectFrom(fromRef, cardIndex);
+        } else if(fromRef.type==="waste"){
+          selectFrom(fromRef);
+        }
+      }
+    });
+
+    cardEl.addEventListener("pointerdown", (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      const id = cardEl.dataset.id;
+      const c = findCardById(id);
+      if(!c || !c.faceUp) return;
+      beginDrag(e, fromRef, cardIndex);
+    }, {passive:false});
+
+    cardEl.addEventListener("pointermove", (e)=>{
+      if(!drag || drag.pointerId!==e.pointerId) return;
+      updateDrag(e);
+    });
+    cardEl.addEventListener("pointerup", (e)=>{
+      if(!drag || drag.pointerId!==e.pointerId) return;
+      endDrag(e);
+    });
+    cardEl.addEventListener("pointercancel", (e)=>{
+      if(!drag || drag.pointerId!==e.pointerId) return;
+      endDrag(e);
+    });
+  }
+
+  function findCardById(id){
+    for(const c of state.stock) if(c.id===id) return c;
+    for(const c of state.waste) if(c.id===id) return c;
+    for(const p of state.foundations) for(const c of p) if(c.id===id) return c;
+    for(const col of state.tableau) for(const c of col) if(c.id===id) return c;
+    return null;
+  }
+
+  function render(){
+    $("#moves").textContent = state.moves;
+    clearPileDOM();
+    clearHighlights();
+
+    // stock
+    if(state.stock.length>0){
+      const c = {...top(state.stock), faceUp:false};
+      const el = makeCardEl(c);
+      el.style.left="0px"; el.style.top="0px";
+      $("#stockPile").appendChild(el);
+      attachStockTap();
+    } else attachStockTap();
+
+    // waste (fan last 3)
+    const fan = Math.min(3, state.waste.length);
+    for(let i=fan;i>=1;i--){
+      const c = state.waste[state.waste.length - i];
+      const el = makeCardEl(c);
+      el.style.left = (i===1 ? 0 : (i-1)*12) + "px";
+      el.style.top  = (i===1 ? 0 : (i-1)*3) + "px";
+      $("#wastePile").appendChild(el);
+      if(i===1){
+        attachCardHandlers(el, {type:"waste"});
+        if(isCardSelected(c.id)) el.classList.add("selected");
+      } else {
+        el.style.pointerEvents="none";
+        el.style.opacity="0.92";
+      }
+    }
+
+    // foundations
+    for(let i=0;i<4;i++){
+      const pile = state.foundations[i];
+      const host = $(`#foundation${i}`);
+      if(pile.length>0){
+        const c = top(pile);
+        const el = makeCardEl(c);
+        el.style.left="0px"; el.style.top="0px";
+        host.appendChild(el);
+        attachCardHandlers(el, {type:"foundation", idx:i});
+        if(isCardSelected(c.id)) el.classList.add("selected");
+      }
+      $(`.pileTarget[data-pile="foundation"][data-idx="${i}"]`).onclick = ()=>handlePileTap({type:"foundation", idx:i});
+    }
+
+    // tableau
+    for(let col=0; col<7; col++){
+      const colEl = $(`.col[data-idx="${col}"]`);
+      const cards = state.tableau[col];
+      for(let i=0;i<cards.length;i++){
+        const c = cards[i];
+        const el = makeCardEl(c);
+        const y = i * (c.faceUp ? 26 : 16);
+        el.style.left="0px"; el.style.top=y+"px";
+        el.style.zIndex = 10+i;
+        colEl.appendChild(el);
+        attachCardHandlers(el, {type:"tableau", idx:col}, i);
+        if(isCardSelected(c.id)) el.classList.add("selected");
+        if(state.selected && state.selected.dragging && state.selected.cards.some(x=>x.id===c.id)){
+          el.style.zIndex = 9999;
+        }
+      }
+      colEl.onclick = (ev)=>{ if(ev.target.classList.contains("card")) return; handlePileTap({type:"tableau", idx:col}); };
+    }
+
+    $(".pileTarget[data-pile='stock']").onclick = ()=>handlePileTap({type:"stock"});
+    $(".pileTarget[data-pile='waste']").onclick = ()=>handlePileTap({type:"waste"});
+
+    if(state.selected){
+      highlightDestinations(state.selected.cards[0], state.selected.cards.length);
+    }
+
+    resizeConfetti();
+  }
+
+  // wiring
+  $("#difficulty").addEventListener("change", (e)=>{
+    setDifficulty(e.target.value);
+    toast("難易度を変更したよ（新しいゲームで反映）");
+  });
+  $("#newBtn").addEventListener("click", ()=>newGame());
+  $("#undoBtn").addEventListener("click", ()=>undo());
+  $("#hintBtn").addEventListener("click", ()=>hint());
+  $("#playAgainBtn").addEventListener("click", ()=>newGame());
+  $("#closeWinBtn").addEventListener("click", ()=>{
+    $("#winOverlay").classList.remove("show");
+    $("#winOverlay").setAttribute("aria-hidden","true");
+  });
+
+  // avoid scroll while dragging
+  board.addEventListener("touchmove", (e)=>{ if(drag) e.preventDefault(); }, {passive:false});
+
+  // init
+  setDifficulty($("#difficulty").value);
+  newGame();
+})();
+</script>
+</body>
+</html>
